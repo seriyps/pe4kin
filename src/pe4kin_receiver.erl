@@ -2,7 +2,8 @@
 %%% @author Sergey Prokhorov <me@seriyps.ru>
 %%% @copyright (C) 2016, Sergey Prokhorov
 %%% @doc
-%%%
+%%% Telegram bot update pooler.
+%%% Receive incoming messages (updates) via webhook or http longpolling.
 %%% @end
 %%% Created : 18 May 2016 by Sergey Prokhorov <me@seriyps.ru>
 %%%-------------------------------------------------------------------
@@ -36,8 +37,8 @@
           buffer_edge_size :: non_neg_integer(),
           method :: webhook | longpoll,
           method_opts :: longpoll_opts(),
-          active :: boolean(),
           method_state :: longpoll_state(),
+          active :: boolean(),
           last_update_id :: integer(),
           subscribers :: ordsets:ordset(pid()),
           ulen :: non_neg_integer(),
@@ -108,7 +109,7 @@ handle_call({stop_http_poll, _}, _From, #state{method = longpoll, active = Activ
                  false -> State
              end,
     {reply, ok, State1#state{method = undefined}};
-handle_call(webhook_______, _From, State) ->
+handle_call(webhook___TODO, _From, State) ->
     Reply = ok,
     {reply, Reply, State};
 handle_call({subscribe, _, Pid}, _From, #state{subscribers=Subs} = State) ->

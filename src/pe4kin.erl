@@ -127,14 +127,15 @@ get_updates_sync(Bot, Opts) ->
 
 %% Generic API methods
 
--spec download_file(bot_name(), json_object()) -> {ok, binary()}.
+-spec download_file(bot_name(), json_object()) -> {ok, Headers :: [{binary(), binary()}], Body :: binary()}.
 download_file(Bot, #{<<"file_id">> := _,
                      <<"file_path">> := FilePath}) ->
     Endpoint = application:get_env(pe4kin, api_server_endpoint, <<"https://api.telegram.org">>),
     Token = get_token(Bot),
-    Url = <<Endpoint/binary, "file/bot", Token/binary, "/", FilePath/binary>>,
-    {ok, 200, _Hdrs, BodyRef} = do_api_call(Url, undefined),
-    hackney:body(BodyRef).
+    Url = <<Endpoint/binary, "/file/bot", Token/binary, "/", FilePath/binary>>,
+    {ok, 200, Headers, BodyRef} = do_api_call(Url, undefined),
+    {ok, Body} = hackney:body(BodyRef),
+    {ok, Headers, Body}.
 
 
 -spec api_call(bot_name(), binary()) -> {ok, json_value()} | {error, Type :: atom(), term()}.
@@ -197,22 +198,36 @@ body_with_file_([Key | Keys] = AllKeys, json, Map) ->
     end;
 body_with_file_([Key | Keys], multipart, List) ->
     case lists:keyfind(Key, 1, List) of
-        {Key, Bin} when is_binary(Bin) -> body_with_file_(Keys, multipart, List);
-        {Key, File} ->
-            lists:keyreplace(Key, 1, List, file2multipart(Key, File))
+        {Key, Bin} when is_binary(Bin) ->
+            %% file ID
+            body_with_file_(Keys, multipart, List);
+        {Key, File} when is_tuple(File) ->
+            %% `file' or `file_name' tuple
+            body_with_file_(Keys, multipart, lists:keyreplace(Key, 1, List, file2multipart(Key, File)))
     end;
-body_with_file_([], Type, Load) ->
-    {Type, Load}.
+body_with_file_([], multipart, Load) ->
+    ToBin = fun(V) when is_integer(V) -> integer_to_binary(V);
+               (V) when is_atom(V) -> atom_to_binary(V, utf8);
+               (V) -> V
+            end,
+    BinLoad = lists:map(fun({K, V}) ->
+                                {ToBin(K), ToBin(V)};
+                           (File) -> File
+                        end, Load),
+    {multipart, BinLoad};
+body_with_file_([], Enctype, Load) ->
+    %% json
+    {Enctype, Load}.
 
 file2multipart(Key, {file, FileName, ContentType, Payload}) ->
-    {Key,
+    {atom_to_binary(Key, utf8),
      Payload,
-     {<<"form-data">>, [{<<"name">>, Key},
+     {<<"form-data">>, [{<<"name">>, atom_to_binary(Key, utf8)},
                         {<<"filename">>, FileName}]},
      [{<<"Content-Type">>, ContentType}]};
 file2multipart(Key, {file_path, Path}) ->
     {file,
      Path,
-     {<<"form-data">>, [{<<"name">>, Key},
+     {<<"form-data">>, [{<<"name">>, atom_to_binary(Key, utf8)},
                         {<<"filename">>, filename:basename(Path)}]},
       []}.
