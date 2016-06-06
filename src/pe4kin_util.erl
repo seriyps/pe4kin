@@ -7,6 +7,7 @@
 
 -module(pe4kin_util).
 -export([slice/2, slice/3, slice_pos/2, slice_pos/3]).
+-export([strlen/1]).
 -export([strip/1, strip/2]).
 -export([to_lower/1]).
 -export([to_binary/1]).
@@ -46,6 +47,14 @@ slice_pos_(<<_C/utf8, Utf8/binary>> = B, Size, BS) ->
 %% slice(_, 0) -> <<>>;
 %% slice(<<C/utf8, Rest/binary>>, Size) ->
 %%     <<C/utf8, (slice(Rest, Size - 1))/binary>>.
+
+
+strlen(Utf8) ->
+    strlen(Utf8, 0).
+
+strlen(<<_/utf8, Rest/binary>>, Len) ->
+    strlen(Rest, Len + 1);
+strlen(<<>>, Len) -> Len.
 
 
 

@@ -12,6 +12,15 @@
 -export([command_get_args/3]).
 
 
+%% @doc Detect incoming update type
+update_type(#{<<"message">> := _}) -> message;
+update_type(#{<<"edited_message">> := _}) -> edited_message;
+update_type(#{<<"inline_query">> := _}) -> inline_query;
+update_type(#{<<"chosen_inline_result">> := _}) -> chosen_inline_result;
+update_type(#{<<"callback_query">> := _}) -> callback_query;
+update_type(#{}) -> undefined.
+
+
 %% @doc Returns only 1st command
 -spec message_command(perkin:bot_name(), pe4kin:json_object()) ->
                              {Cmd :: binary(),
@@ -88,6 +97,7 @@ read_args1(N, Text) ->
         [] -> [];
         [Arg] -> [Arg]
     end.
+
 
 
 -ifdef(TEST).
