@@ -177,15 +177,21 @@ do_start_http_poll(Opts, #state{token=Token, active=false} = State) ->
                          || {Key, Val} <- maps:to_list(Opts1)]),
     Endpoint = application:get_env(pe4kin, api_server_endpoint, <<"https://api.telegram.org">>),
     Url = <<Endpoint/binary, "/bot", Token/binary, "/getUpdates?", QS/binary>>,
-    {ok, Ref} = hackney:request(<<"GET">>, Url, [], <<>>,
-                                [async, {recv_timeout, (Timeout + 5) * 1000}]),
-    State#state{%% method = longpoll,
-                active = true,
-                method_state = #{ref => Ref,
-                                 state => start,
-                                 status => undefined,
-                                 headers => undefined,
-                                 body => undefined}}.
+    case hackney:request(<<"GET">>, Url, [], <<>>,
+                         [async, {recv_timeout, (Timeout + 5) * 1000}]) of
+        {ok, Ref} ->
+            State#state{%% method = longpoll,
+              active = true,
+              method_state = #{ref => Ref,
+                               state => start,
+                               status => undefined,
+                               headers => undefined,
+                               body => undefined}};
+        {error, Reason} ->
+            error_logger:warn_msg("Long polling HTTP error: ~p", [Reason]),
+            timer:sleep(1000),
+            do_start_http_poll(Opts, State)
+    end.
 
 do_stop_http_poll(#state{active=true, method=longpoll,
                          method_state=#{ref := Ref}} = State) ->
