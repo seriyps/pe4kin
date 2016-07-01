@@ -119,7 +119,7 @@ handle_call({unsubscribe, _, Pid}, _From, #state{subscribers=Subs} = State) ->
     Subs1 = ordsets:del_element(Pid, Subs),
     {reply, ok, State#state{subscribers=Subs1}};
 handle_call({get_updates, _, Limit}, _From, #state{buffer_edge_size=BESize, subscribers=[]} = State) ->
-    (BESize >= Limit) orelse error_logger:warn_msg(
+    (BESize >= Limit) orelse error_logger:warning_msg(
                                "get_updates limit ~p is greater than buffer_edge_size ~p",
                                [Limit, BESize]),
     {Reply, State1} = pull_updates(Limit, State),
@@ -188,7 +188,7 @@ do_start_http_poll(Opts, #state{token=Token, active=false} = State) ->
                                headers => undefined,
                                body => undefined}};
         {error, Reason} ->
-            error_logger:warn_msg("Long polling HTTP error: ~p", [Reason]),
+            error_logger:warning_msg("Long polling HTTP error: ~p", [Reason]),
             timer:sleep(1000),
             do_start_http_poll(Opts, State)
     end.
