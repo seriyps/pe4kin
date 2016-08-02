@@ -14,5 +14,5 @@
 
   {maintainers, ["Sergey Prokhorov"]},
   {licenses, ["Apache 2.0"]},
-  {links, []}
+  {links, [{"Github", "https://github.com/seriyps/pe4kin"}]}
  ]}.
