@@ -7,7 +7,7 @@
 
 -module(pe4kin_types).
 
--export([message_type/1, message_command/2]).
+-export([update_type/1, message_type/1, message_command/2]).
 
 -export([command_get_args/3]).
 
