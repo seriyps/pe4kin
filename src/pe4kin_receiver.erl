@@ -199,11 +199,15 @@ do_stop_http_poll(#state{active=true, method=longpoll,
     State#state{active=false, method_state=undefined}.
 
 
-handle_http_poll_msg({status, Status, _Reason},
+handle_http_poll_msg({status, 200 = Status, _Reason},
                      #state{method_state = #{state := start,
                                              status := undefined}=MState} = State) ->
-    %% XXX: maybe assert Status == 200?
     {ok, State#state{method_state = MState#{state := status, status := Status}}};
+handle_http_poll_msg({status, Status, _Reason},
+                     #state{method_state = MState, name = Name} = State) ->
+    error_logger:warning_msg("Bot ~p: longpool bad status ~p when state ~p",
+                             [Name, Status, MState]),
+    {invariant, State#state{method_state = undefined, active=false}};
 handle_http_poll_msg({headers, Headers},
                      #state{method_state = #{state := status,
                                              headers := undefined}=MState} = State) ->
