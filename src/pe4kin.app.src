@@ -1,6 +1,6 @@
 {application, pe4kin,
  [{description, "Telegram messenger bot API wrapper"},
-  {vsn, "0.1.1"},
+  {vsn, "0.1.2"},
   {registered, []},
   {mod, { pe4kin_app, []}},
   {applications,
