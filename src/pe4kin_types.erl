@@ -7,18 +7,61 @@
 
 -module(pe4kin_types).
 
--export([update_type/1, message_type/1, message_command/2]).
+-export([update_type/1, message_type/1, message_command/2,
+         chat_id/2, object/2, user/2]).
 
 -export([command_get_args/3]).
 
+-type update_type() :: message
+                     | edited_message
+                     | channel_post
+                     | edited_channel_post
+                     | inline_query
+                     | chosen_inline_result
+                     | callback_query
+                     | shipping_query
+                     | pre_checkout_query.
 
 %% @doc Detect incoming update type
+-spec update_type(pe4kin:json_object()) -> update_type() | undefined.
 update_type(#{<<"message">> := _}) -> message;
 update_type(#{<<"edited_message">> := _}) -> edited_message;
+update_type(#{<<"channel_post">> := _}) -> channel_post;
+update_type(#{<<"edited_channel_post">> := _}) -> edited_channel_post;
 update_type(#{<<"inline_query">> := _}) -> inline_query;
 update_type(#{<<"chosen_inline_result">> := _}) -> chosen_inline_result;
 update_type(#{<<"callback_query">> := _}) -> callback_query;
+update_type(#{<<"shipping_query">> := _}) -> shipping_query;
+update_type(#{<<"pre_checkout_query">> := _}) -> pre_checkout_query;
 update_type(#{}) -> undefined.
+
+-spec chat_id(update_type(), pe4kin:update()) -> {ok, pe4kin:chat_id()} | undefined.
+chat_id(UpdType, Update) ->
+    case lists:member(UpdType, [message, edited_message, channel_post,
+                               edited_channel_post]) of
+        true ->
+            {ok, #{<<"chat">> := #{<<"id">> := ChatId}}} = object(UpdType, Update),
+            {ok, ChatId};
+        false when UpdType == callback_query ->
+            #{<<"callback_query">> :=
+                  #{<<"message">> :=
+                        #{<<"chat">> :=
+                              #{<<"id">> := ChatId}}}} = Update,
+            {ok, ChatId};
+        _ -> undefined
+    end.
+
+-spec object(update_type(), pe4kin:update()) -> {ok, pe4kin:json_object()} | error.
+object(undefined, _) -> error;
+object(Type, Update) ->
+    Key = atom_to_binary(Type, utf8),
+    maps:find(Key, Update).
+
+%% @doc gets `User' structure from an update
+-spec user(update_type(), pe4kin:update()) -> {ok, pe4kin:json_object()} | error.
+user(Type, Update) ->
+    {ok, Object} = object(Type, Update),
+    maps:find(<<"from">>, Object).
 
 
 %% @doc Returns only 1st command
@@ -43,10 +86,12 @@ message_command(BotName, #{<<"text">> := Text,
 message_type(#{<<"message_id">> := _, <<"text">> := _}) -> text;
 message_type(#{<<"message_id">> := _, <<"audio">> := _}) -> audio;
 message_type(#{<<"message_id">> := _, <<"document">> := _}) -> document;
+message_type(#{<<"message_id">> := _, <<"game">> := _}) -> game;
 message_type(#{<<"message_id">> := _, <<"photo">> := _}) -> photo;
 message_type(#{<<"message_id">> := _, <<"sticker">> := _}) -> sticker;
 message_type(#{<<"message_id">> := _, <<"video">> := _}) -> video;
 message_type(#{<<"message_id">> := _, <<"voice">> := _}) -> voice;
+message_type(#{<<"message_id">> := _, <<"video_note">> := _}) -> video_note;
 message_type(#{<<"message_id">> := _, <<"caption">> := _}) -> caption;
 message_type(#{<<"message_id">> := _, <<"contact">> := _}) -> contact;
 message_type(#{<<"message_id">> := _, <<"location">> := _}) -> location;
@@ -62,6 +107,9 @@ message_type(#{<<"message_id">> := _, <<"channel_chat_created">> := _}) -> chann
 message_type(#{<<"message_id">> := _, <<"migrate_to_chat_id">> := _}) -> migrate_to_chat_id;
 message_type(#{<<"message_id">> := _, <<"migrate_from_chat_id">> := _}) -> migrate_from_chat_id;
 message_type(#{<<"message_id">> := _, <<"pinned_message">> := _}) -> pinned_message;
+message_type(#{<<"message_id">> := _, <<"invoice">> := _}) -> invoice;
+message_type(#{<<"message_id">> := _, <<"successfull_payment">> := _}) -> successfull_payment;
+message_type(#{<<"message_id">> := _, <<"connected_website">> := _}) -> connected_website;
 message_type(#{<<"message_id">> := _}) -> undefined.
 
 

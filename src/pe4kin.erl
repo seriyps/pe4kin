@@ -6,7 +6,7 @@
 %%% Created : 18 May 2016 by Sergey Prokhorov <me@seriyps.ru>
 
 -module(pe4kin).
--export([api_call/2, api_call/3, download_file/2]).
+-export([api_call/2, api_call/3, download_file/2, send_big_text/2]).
 -export([launch_bot/3]).
 -export([get_me/1, send_message/2, forward_message/2, send_photo/2, send_audio/2,
          send_document/2, send_sticker/2, send_video/2, send_voice/2, send_location/2,
@@ -14,10 +14,11 @@
          get_file/2, kick_chat_member/2, unban_chat_member/2, answer_callback_query/2,
          get_updates_sync/2]).
 
--export_type([bot_name/0, update/0]).
+-export_type([bot_name/0, chat_id/0, update/0]).
 -export_type([json_object/0, json_value/0]).
 
 -type bot_name() :: binary().                   % bot name without leading "@"
+-type chat_id() :: integer().                   % =< 52 bit
 -type update() :: json_object().
 -type input_file() :: {file, Name :: binary(), ContentType :: binary(), Payload :: iodata()}
                     | {file_path, file:name()}
@@ -117,6 +118,30 @@ unban_chat_member(Bot, #{chat_id := _, user_id := _} = Req) ->
 
 answer_callback_query(Bot, #{callback_query_id := _} = Req) ->
     api_call(Bot, <<"answerCallbackQuery">>, {json, Req}).
+
+
+%% @doc Sends text message and if it's too big for a single message, splits it to many.
+%% It's not a good idea to add extra fields like online keyboards, because they will be
+%% attached to every message
+send_big_text(Bot, #{chat_id := _, text := Text} = Message) ->
+    case pe4kin_util:strlen(Text) of
+        L when L > 4095 ->
+            {split, send_text_by_parts(Bot, Text, Message)};
+        _ ->
+            send_message(Bot, Message)
+    end.
+
+send_text_by_parts(Bot, Utf8Str, Extra) ->
+    try pe4kin_util:slice_pos(Utf8Str, 4095) of
+        SliceBSize ->
+            <<Slice:SliceBSize/binary, Rest/binary>> = Utf8Str,
+            Res = send_message(Bot, Extra#{text => Slice}),
+            [Res | send_text_by_parts(Bot, Rest, Extra)]
+    catch error:_ ->
+            %% too short
+            [send_message(Bot, Extra#{text => Utf8Str})]
+    end.
+
 
 %% @doc
 %% This API is for testing purposes
