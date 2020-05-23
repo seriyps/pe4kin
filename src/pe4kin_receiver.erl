@@ -22,6 +22,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-include_lib("hut/include/hut.hrl").
+
 -type longpoll_state() :: #{ref => hackney:client_ref(),
                             state => start | status | headers | body,
                             status => pos_integer(),
@@ -119,9 +121,8 @@ handle_call({unsubscribe, _, Pid}, _From, #state{subscribers=Subs} = State) ->
     Subs1 = ordsets:del_element(Pid, Subs),
     {reply, ok, State#state{subscribers=Subs1}};
 handle_call({get_updates, _, Limit}, _From, #state{buffer_edge_size=BESize, subscribers=[]} = State) ->
-    (BESize >= Limit) orelse error_logger:warning_msg(
-                               "get_updates limit ~p is greater than buffer_edge_size ~p",
-                               [Limit, BESize]),
+    (BESize >= Limit) orelse
+        ?log(warning, "get_updates limit ~p is greater than buffer_edge_size ~p", [Limit, BESize]),
     {Reply, State1} = pull_updates(Limit, State),
     {reply, Reply, invariant(State1)};
 handle_call(_Request, _From, #state{method=Method, subscribers=Subs, ulen=ULen, active=Active}=State) ->
@@ -129,7 +130,8 @@ handle_call(_Request, _From, #state{method=Method, subscribers=Subs, ulen=ULen, 
                                    n_subscribers => length(Subs),
                                    ulen => ULen,
                                    active => Active}}, State}.
-handle_cast(_Msg, State) ->
+handle_cast(Msg, State) ->
+    ?log(warning, "Unexpected cast ~p; state ~p", [Msg, State]),
     {noreply, State}.
 
 handle_info({hackney_response, Ref, Msg}, #state{method_state=#{ref := Ref}} = State) ->
@@ -140,10 +142,10 @@ handle_info({hackney_response, Ref, Msg}, #state{method_state=#{ref := Ref}} = S
             {noreply, invariant(State1)}
     end;
 handle_info({hackney_response, Ref, Msg}, #state{method_state=MState} = State) ->
-    error_logger:warning_msg("Unexpected hackney msg ~p, ~p; state ~p",
-                             [Ref, Msg, MState]),
+    ?log(warning, "Unexpected hackney msg ~p, ~p; state ~p", [Ref, Msg, MState]),
     {noreply, State};
-handle_info(_Info, State) ->
+handle_info(Info, State) ->
+    ?log(warning, "Unexpected info msg ~p; state ~p", [Info, State]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -188,7 +190,7 @@ do_start_http_poll(Opts, #state{token=Token, active=false} = State) ->
                                headers => undefined,
                                body => undefined}};
         {error, Reason} ->
-            error_logger:warning_msg("Long polling HTTP error: ~p", [Reason]),
+            ?log(warning, "Long polling HTTP error: ~p", [Reason]),
             timer:sleep(1000),
             do_start_http_poll(Opts, State)
     end.
@@ -205,8 +207,7 @@ handle_http_poll_msg({status, 200 = Status, _Reason},
     {ok, State#state{method_state = MState#{state := status, status := Status}}};
 handle_http_poll_msg({status, Status, _Reason},
                      #state{method_state = MState, name = Name} = State) ->
-    error_logger:warning_msg("Bot ~p: longpool bad status ~p when state ~p",
-                             [Name, Status, MState]),
+    ?log(warning, "Bot ~p: longpool bad status ~p when state ~p", [Name, Status, MState]),
     {invariant, State#state{method_state = undefined, active=false}};
 handle_http_poll_msg({headers, Headers},
                      #state{method_state = #{state := status,
@@ -220,8 +221,7 @@ handle_http_poll_msg(done, #state{method_state = #{state := _,
                                                    body := undefined}} = State) ->
     {invariant, State};
 handle_http_poll_msg({error, Reason}, #state{method_state = MState, name=Name} = State) ->
-    error_logger:error_msg("Bot ~p: hackney longpoll error ~p when state ~p",
-                           [Name, Reason, MState]),
+    ?log(error, "Bot ~p: hackney longpoll error ~p when state ~p", [Name, Reason, MState]),
     {invariant, State#state{method_state=undefined, active=false}};
 handle_http_poll_msg(Chunk, #state{method_state = #{state := headers,
                                                     body := undefined}=MState} = State) ->
