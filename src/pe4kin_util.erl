@@ -19,7 +19,7 @@ slice(Utf8, Offset, Size) ->
 
 slice(Utf8, Size) ->
     BSize = slice_pos(Utf8, Size),
-    binary:part(0, BSize).
+    binary:part(Utf8, 0, BSize).
 
 %% @doc convert utf-8 Offset and Size to byte offset and size
 -spec slice_pos(<<_:8>>, non_neg_integer(), non_neg_integer()) ->

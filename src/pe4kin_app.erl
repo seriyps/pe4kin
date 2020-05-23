@@ -15,8 +15,8 @@
 %%====================================================================
 
 start(_StartType, _StartArgs) ->
-    PoolOpts = application:get_env(
-                 pe4kin, hackney_pool,
+    PoolOpts = pe4kin:get_env(
+                 hackney_pool,
                  [{timeout, 150000}, {max_connections, 100}]),
     ok = hackney_pool:start_pool(pe4kin, PoolOpts),
     pe4kin_sup:start_link().

@@ -13,6 +13,7 @@
          send_venue/2, send_contact/2, send_chat_action/2, get_user_profile_photos/2,
          get_file/2, kick_chat_member/2, unban_chat_member/2, answer_callback_query/2,
          get_updates_sync/2]).
+-export([get_env/1, get_env/2]).
 
 -export_type([bot_name/0, chat_id/0, update/0]).
 -export_type([json_object/0, json_value/0]).
@@ -48,11 +49,11 @@
 -define(HACKNEY_POOL, ?MODULE).
 
 get_token(Bot) ->
-    {ok, Token} = application:get_env(?MODULE, {Bot, token}),
+    {ok, Token} = get_env({Bot, token}),
     Token.
 
 launch_bot(Bot, Token, Opts) ->
-    application:set_env(?MODULE, {Bot, token}, Token),
+    set_env({Bot, token}, Token),
     case Opts of
         #{receiver := true} ->
             %% pe4kin_receiver_sup:start_receiver(
@@ -156,7 +157,7 @@ get_updates_sync(Bot, Opts) ->
 -spec download_file(bot_name(), json_object()) -> {ok, Headers :: [{binary(), binary()}], Body :: binary()}.
 download_file(Bot, #{<<"file_id">> := _,
                      <<"file_path">> := FilePath}) ->
-    Endpoint = application:get_env(pe4kin, api_server_endpoint, <<"https://api.telegram.org">>),
+    Endpoint = get_env(api_server_endpoint, <<"https://api.telegram.org">>),
     Token = get_token(Bot),
     Url = <<Endpoint/binary, "/file/bot", Token/binary, "/", FilePath/binary>>,
     {ok, 200, Headers, BodyRef} = do_api_call(Url, undefined),
@@ -170,7 +171,7 @@ api_call(Bot, Method) ->
 
 -spec api_call(bot_name(), binary(), api_body()) -> {ok, json_value()} | {error, Type :: atom(), term()}.
 api_call(Bot, Method, Payload) ->
-    Endpoint = application:get_env(pe4kin, api_server_endpoint, <<"https://api.telegram.org">>),
+    Endpoint = get_env(api_server_endpoint, <<"https://api.telegram.org">>),
     Token = get_token(Bot),
     api_call({Endpoint, Token}, Bot, Method, Payload).
 
@@ -257,3 +258,18 @@ file2multipart(Key, {file_path, Path}) ->
      {<<"form-data">>, [{<<"name">>, atom_to_binary(Key, utf8)},
                         {<<"filename">>, filename:basename(Path)}]},
       []}.
+
+-dialyzer({nowarn_function, get_env/2}).
+-spec get_env(any(), any()) -> any().
+get_env(Key, Default) ->
+    application:get_env(?MODULE, Key, Default).
+
+-dialyzer({nowarn_function, get_env/1}).
+-spec get_env(any()) -> {ok, any()}.
+get_env(Key) ->
+    application:get_env(?MODULE, Key).
+
+-dialyzer({nowarn_function, set_env/2}).
+-spec set_env(any(), any()) -> ok.
+set_env(Key, Value) ->
+    application:set_env(?MODULE, Key, Value).

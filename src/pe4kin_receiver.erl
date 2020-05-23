@@ -25,10 +25,10 @@
 -include_lib("hut/include/hut.hrl").
 
 -type longpoll_state() :: #{ref => hackney:client_ref(),
-                            state => start | status | headers | body,
-                            status => pos_integer(),
-                            headers => [{binary(), binary()}],
-                            body => iodata()}.
+                            state => start | status | headers | body | undefined,
+                            status => pos_integer() | undefined,
+                            headers => [{binary(), binary()}] | undefined,
+                            body => iodata() | undefined}.
 -type longpoll_opts() :: #{limit => 1..100,
                            timeout => non_neg_integer()}.
 
@@ -37,11 +37,11 @@
           name :: pe4kin:bot_name(),
           token :: binary(),
           buffer_edge_size :: non_neg_integer(),
-          method :: webhook | longpoll,
-          method_opts :: longpoll_opts(),
-          method_state :: longpoll_state(),
+          method :: webhook | longpoll | undefined,
+          method_opts :: longpoll_opts() | undefined,
+          method_state :: longpoll_state() | undefined,
           active :: boolean(),
-          last_update_id :: integer(),
+          last_update_id :: integer() | undefined,
           subscribers :: ordsets:ordset(pid()),
           ulen :: non_neg_integer(),
           updates :: queue:queue()
@@ -177,7 +177,7 @@ do_start_http_poll(Opts, #state{token=Token, active=false} = State) ->
     Opts1 = #{timeout := Timeout} = maps:merge(#{timeout => 30}, Opts),
     QS = hackney_url:qs([{atom_to_binary(Key, utf8), integer_to_binary(Val)}
                          || {Key, Val} <- maps:to_list(Opts1)]),
-    Endpoint = application:get_env(pe4kin, api_server_endpoint, <<"https://api.telegram.org">>),
+    Endpoint = pe4kin:get_env(api_server_endpoint, <<"https://api.telegram.org">>),
     Url = <<Endpoint/binary, "/bot", Token/binary, "/getUpdates?", QS/binary>>,
     case hackney:request(<<"GET">>, Url, [], <<>>,
                          [async, {recv_timeout, (Timeout + 5) * 1000}]) of
@@ -280,4 +280,3 @@ invariant(
                                                  and (Method =/= undefined) ->
     invariant(pause_get_updates(State));
 invariant(State) -> State.
-
