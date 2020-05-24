@@ -9,7 +9,10 @@
     hackney,
     cowboy
    ]},
-  {env,[]},
+  {env,
+   [
+    {api_server_endpoint, <<"https://api.telegram.org">>}
+   ]},
   {modules, []},
 
   {maintainers, ["Sergey Prokhorov"]},

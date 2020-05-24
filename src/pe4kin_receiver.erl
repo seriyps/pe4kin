@@ -42,7 +42,8 @@
           method_state :: longpoll_state() | undefined,
           active :: boolean(),
           last_update_id :: integer() | undefined,
-          subscribers :: ordsets:ordset(pid()),
+          subscribers :: #{pid() => reference()},
+          monitors :: #{reference() => pid()},
           ulen :: non_neg_integer(),
           updates :: queue:queue()
         }).
@@ -74,7 +75,7 @@ webhook_callback(Path, Query, Body) ->
     gen_server:call(?MODULE, {webhook_callback, Path, Query, Body}).
 
 
--spec subscribe(pe4kin:bot_name(), pid()) -> ok.
+-spec subscribe(pe4kin:bot_name(), pid()) -> ok | {error, process_already_subscribed}.
 subscribe(Bot, Pid) ->
     gen_server:call(?MODULE, {subscribe, Bot, Pid}).
 
@@ -87,7 +88,6 @@ unsubscribe(Bot, Pid) ->
 get_updates(Bot, Limit) ->
     gen_server:call(?MODULE, {get_updates, Bot, Limit}).
 
-
 start_link(Bot, Token, Opts) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Bot, Token, Opts], []).
 
@@ -96,7 +96,8 @@ init([Bot, Token, Opts]) ->
     {ok, #state{name = Bot,
                 token = Token,
                 active = false,
-                subscribers = ordsets:new(),
+                subscribers = #{},
+                monitors = #{},
                 ulen = 0,
                 updates = queue:new(),
                 buffer_edge_size = maps:get(buffer_edge_size, Opts, 1000)}}.
@@ -114,20 +115,31 @@ handle_call({stop_http_poll, _}, _From, #state{method = longpoll, active = Activ
 handle_call(webhook___TODO, _From, State) ->
     Reply = ok,
     {reply, Reply, State};
-handle_call({subscribe, _, Pid}, _From, #state{subscribers=Subs} = State) ->
-    Subs1 = ordsets:add_element(Pid, Subs),
-    {reply, ok, invariant(State#state{subscribers=Subs1})};
-handle_call({unsubscribe, _, Pid}, _From, #state{subscribers=Subs} = State) ->
-    Subs1 = ordsets:del_element(Pid, Subs),
-    {reply, ok, State#state{subscribers=Subs1}};
-handle_call({get_updates, _, Limit}, _From, #state{buffer_edge_size=BESize, subscribers=[]} = State) ->
+handle_call({subscribe, _, Pid}, _From, #state{subscribers=Subs, monitors = Mons} = State) ->
+    case maps:is_key(Pid, Subs) of
+        false ->
+            Ref = erlang:monitor(process, Pid),
+            Subs1 = Subs#{Pid => Ref},
+            Mons1 = Mons#{Ref => Pid},
+            {reply, ok, invariant(State#state{subscribers=Subs1, monitors = Mons1})};
+        true ->
+            {reply, {error, process_already_subscribed}, State}
+    end;
+handle_call({unsubscribe, _, Pid}, _From, #state{subscribers=Subs, monitors = Mons} = State) ->
+    {Mon, Subs1} = maps:take(Pid, Subs),
+    erlang:demonitor(Mon, [flush]),
+    {reply, ok,
+     State#state{subscribers = Subs1,
+                 monitors = maps:remove(Mon, Mons)}};
+handle_call({get_updates, _, Limit}, _From, #state{buffer_edge_size=BESize, subscribers=Subs} = State)
+  when map_size(Subs) == 0 ->
     (BESize >= Limit) orelse
         ?log(warning, "get_updates limit ~p is greater than buffer_edge_size ~p", [Limit, BESize]),
     {Reply, State1} = pull_updates(Limit, State),
     {reply, Reply, invariant(State1)};
 handle_call(_Request, _From, #state{method=Method, subscribers=Subs, ulen=ULen, active=Active}=State) ->
     {reply, {error, bad_request, #{method => Method,
-                                   n_subscribers => length(Subs),
+                                   n_subscribers => map_size(Subs),
                                    ulen => ULen,
                                    active => Active}}, State}.
 handle_cast(Msg, State) ->
@@ -144,6 +156,10 @@ handle_info({hackney_response, Ref, Msg}, #state{method_state=#{ref := Ref}} = S
 handle_info({hackney_response, Ref, Msg}, #state{method_state=MState} = State) ->
     ?log(warning, "Unexpected hackney msg ~p, ~p; state ~p", [Ref, Msg, MState]),
     {noreply, State};
+handle_info({'DOWN', Ref, process, Pid, Reason}, #state{subscribers=Subs, monitors = Mons} = State) ->
+    {noreply,
+     State#state{subscribers = maps:remove(Pid, Subs),
+                 monitors = maps:remove(Ref, Mons)}};
 handle_info(Info, State) ->
     ?log(warning, "Unexpected info msg ~p; state ~p", [Info, State]),
     {noreply, State}.
@@ -179,6 +195,7 @@ do_start_http_poll(Opts, #state{token=Token, active=false} = State) ->
                          || {Key, Val} <- maps:to_list(Opts1)]),
     Endpoint = pe4kin:get_env(api_server_endpoint, <<"https://api.telegram.org">>),
     Url = <<Endpoint/binary, "/bot", Token/binary, "/getUpdates?", QS/binary>>,
+    ?log(debug, "Long poll ~s", [Url]),
     case hackney:request(<<"GET">>, Url, [], <<>>,
                          [async, {recv_timeout, (Timeout + 5) * 1000}]) of
         {ok, Ref} ->
@@ -264,12 +281,12 @@ invariant(
                                                  and (Method =/= undefined)->
     invariant(activate_get_updates(State));
 invariant(
-  #state{subscribers = [_|_] = Subscribers,
+  #state{subscribers = Subscribers,
          ulen = ULen,
          updates = Updates,
-         name = Name} = State) when ULen > 0 ->
+         name = Name} = State) when ULen > 0, map_size(Subscribers) > 0 ->
     [Subscriber ! {pe4kin_update, Name,  Update}
-     || Subscriber <- Subscribers,
+     || Subscriber <- maps:keys(Subscribers),
         Update <- queue:to_list(Updates)],
     invariant(State#state{ulen = 0, updates = queue:new()});
 invariant(
