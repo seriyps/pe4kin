@@ -18,7 +18,8 @@ start(Opts0) ->
     StatePid = proc_lib:spawn_link(fun state_enter/0),
     Defaults = #{port => 1080,
                  token => <<"1234:my-token">>,
-                 state_pid => StatePid},
+                 state_pid => StatePid,
+                 api_handler => fun default_api_handler/4},
     Opts = maps:merge(Defaults, Opts0),
     Routes =
         [{'_',
@@ -130,4 +131,11 @@ handle_api_call(<<"getUpdates">>, QS, <<>>, #{state_pid := Pid}) ->
     Changes = subscribe(Pid, Offset, Timeout),  %Will block
     {200, lists:map(fun({UpdOffset, Upd}) ->
                             Upd#{update_id => UpdOffset}
-                    end, Changes)}.
+                    end, Changes)};
+handle_api_call(Method, QS, Body, #{api_handler := Handler} = Opts) ->
+    Handler(Method, QS, Body, Opts).
+
+default_api_handler(Method, QS, Body, _) ->
+    {200, #{method => Method,
+            query => QS,
+            body => Body}}.

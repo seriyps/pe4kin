@@ -6,12 +6,18 @@
   {applications,
    [kernel,
     stdlib,
-    hackney,
+    pooler,
+    gun,
     cowboy
    ]},
   {env,
    [
-    {api_server_endpoint, <<"https://api.telegram.org">>}
+    {api_server_endpoint, <<"https://api.telegram.org">>},
+    {keepalive_pool,
+     [{init_count, 1},
+      {max_count, 10},
+      {cull_interval, {1, min}},
+      {max_age, {2, min}}]}
    ]},
   {modules, []},
 

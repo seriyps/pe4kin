@@ -1,30 +1,18 @@
 {"1.1.0",
-[{<<"certifi">>,{pkg,<<"certifi">>,<<"2.5.1">>},1},
- {<<"cowboy">>,{pkg,<<"cowboy">>,<<"2.7.0">>},0},
+[{<<"cowboy">>,{pkg,<<"cowboy">>,<<"2.7.0">>},0},
  {<<"cowlib">>,{pkg,<<"cowlib">>,<<"2.8.0">>},1},
- {<<"hackney">>,{pkg,<<"hackney">>,<<"1.15.2">>},0},
+ {<<"gun">>,{pkg,<<"gun">>,<<"1.3.0">>},0},
  {<<"hut">>,{pkg,<<"hut">>,<<"1.3.0">>},0},
- {<<"idna">>,{pkg,<<"idna">>,<<"6.0.0">>},1},
  {<<"jiffy">>,{pkg,<<"jiffy">>,<<"1.0.4">>},0},
- {<<"metrics">>,{pkg,<<"metrics">>,<<"1.0.1">>},1},
- {<<"mimerl">>,{pkg,<<"mimerl">>,<<"1.2.0">>},1},
- {<<"parse_trans">>,{pkg,<<"parse_trans">>,<<"3.3.0">>},2},
- {<<"ranch">>,{pkg,<<"ranch">>,<<"1.7.1">>},1},
- {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.5">>},1},
- {<<"unicode_util_compat">>,{pkg,<<"unicode_util_compat">>,<<"0.4.1">>},2}]}.
+ {<<"pooler">>,{pkg,<<"pooler">>,<<"1.5.3">>},0},
+ {<<"ranch">>,{pkg,<<"ranch">>,<<"1.7.1">>},1}]}.
 [
 {pkg_hash,[
- {<<"certifi">>, <<"867CE347F7C7D78563450A18A6A28A8090331E77FA02380B4A21962A65D36EE5">>},
  {<<"cowboy">>, <<"91ED100138A764355F43316B1D23D7FF6BDB0DE4EA618CB5D8677C93A7A2F115">>},
  {<<"cowlib">>, <<"FD0FF1787DB84AC415B8211573E9A30A3EBE71B5CBFF7F720089972B2319C8A4">>},
- {<<"hackney">>, <<"07E33C794F8F8964EE86CEBEC1A8ED88DB5070E52E904B8F12209773C1036085">>},
+ {<<"gun">>, <<"18E5D269649C987AF95AEC309F68A27FFC3930531DD227A6EAA0884D6684286E">>},
  {<<"hut">>, <<"71F2F054E657C03F959CF1ACC43F436EA87580696528CA2A55C8AFB1B06C85E7">>},
- {<<"idna">>, <<"689C46CBCDF3524C44D5F3DDE8001F364CD7608A99556D8FBD8239A5798D4C10">>},
  {<<"jiffy">>, <<"72ADEFF75C52A2FF07DE738F0813768ABE7CE158026CC1115A170340259C0CAA">>},
- {<<"metrics">>, <<"25F094DEA2CDA98213CECC3AEFF09E940299D950904393B2A29D191C346A8486">>},
- {<<"mimerl">>, <<"67E2D3F571088D5CFD3E550C383094B47159F3EEE8FFA08E64106CDF5E981BE3">>},
- {<<"parse_trans">>, <<"09765507A3C7590A784615CFD421D101AEC25098D50B89D7AA1D66646BC571C1">>},
- {<<"ranch">>, <<"6B1FAB51B49196860B733A49C07604465A47BDB78AA10C1C16A3D199F7F8C881">>},
- {<<"ssl_verify_fun">>, <<"6EAF7AD16CB568BB01753DBBD7A95FF8B91C7979482B95F38443FE2C8852A79B">>},
- {<<"unicode_util_compat">>, <<"D869E4C68901DD9531385BB0C8C40444EBF624E60B6962D95952775CAC5E90CD">>}]}
+ {<<"pooler">>, <<"898CD1FA301FC42D4A8ED598CE139B71CA85B54C16AB161152B5CC5FBDCFA1A8">>},
+ {<<"ranch">>, <<"6B1FAB51B49196860B733A49C07604465A47BDB78AA10C1C16A3D199F7F8C881">>}]}
 ].

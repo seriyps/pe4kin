@@ -24,7 +24,8 @@
 
 -include_lib("hut/include/hut.hrl").
 
--type longpoll_state() :: #{ref => hackney:client_ref(),
+-type longpoll_state() :: #{pid => pid(),
+                            ref => reference(),
                             state => start | status | headers | body | undefined,
                             status => pos_integer() | undefined,
                             headers => [{binary(), binary()}] | undefined,
@@ -146,17 +147,29 @@ handle_cast(Msg, State) ->
     ?log(warning, "Unexpected cast ~p; state ~p", [Msg, State]),
     {noreply, State}.
 
-handle_info({hackney_response, Ref, Msg}, #state{method_state=#{ref := Ref}} = State) ->
-    case handle_http_poll_msg(Msg, State) of
-        {ok, State1} ->
-            {noreply, State1};
-        {invariant, State1} ->
-            {noreply, invariant(State1)}
-    end;
-handle_info({hackney_response, Ref, Msg}, #state{method_state=MState} = State) ->
-    ?log(warning, "Unexpected hackney msg ~p, ~p; state ~p", [Ref, Msg, MState]),
+handle_info({gun_response, Pid, Ref, IsFin, Status, Headers}, #state{method_state=#{ref := Ref}} = State) ->
+    WithBody =
+        case IsFin of
+            fin ->
+                {Status, Headers, <<>>};
+            nofin ->
+                {ok, Body} = gun:await_body(Pid, Ref),
+                {Status, Headers, Body};
+            {error, _} = Err ->
+                Err
+        end,
+    State1 = handle_http_poll_msg(WithBody, State),
+    {noreply, invariant(State1)};
+handle_info({gun_response, Ref, Msg}, #state{method_state=MState} = State) ->
+    ?log(warning, "Unexpected http msg ~p, ~p; state ~p", [Ref, Msg, MState]),
     {noreply, State};
-handle_info({'DOWN', Ref, process, Pid, Reason}, #state{subscribers=Subs, monitors = Mons} = State) ->
+handle_info({gun_error, Pid, Ref, Reason}, #state{method_state=#{ref := Ref, pid := Pid}} = State) ->
+    State1 = handle_http_poll_msg({error, Reason}, State),
+    {noreply, invariant(State1)};
+handle_info({gun_error, Pid, Reason}, #state{method_state=#{pid := Pid}} = State) ->
+    State1 = handle_http_poll_msg({error, Reason}, State),
+    {noreply, invariant(State1)};
+handle_info({'DOWN', Ref, process, Pid, _Reason}, #state{subscribers=Subs, monitors = Mons} = State) ->
     {noreply,
      State#state{subscribers = maps:remove(Pid, Subs),
                  monitors = maps:remove(Ref, Mons)}};
@@ -175,7 +188,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%
 activate_get_updates(#state{method=webhook, active=false} = State) ->
     State#state{active=true};
-activate_get_updates(#state{method=longpoll, method_state=undefined, active=false,
+activate_get_updates(#state{method=longpoll, active=false,
                             method_opts=MOpts, last_update_id=LastUpdId} = State) ->
     MOpts1 = case LastUpdId of
                  undefined -> MOpts;
@@ -189,63 +202,41 @@ pause_get_updates(#state{method=webhook, active=true} = State) ->
     State#state{active=false}.
 
 
-do_start_http_poll(Opts, #state{token=Token, active=false} = State) ->
-    Opts1 = #{timeout := Timeout} = maps:merge(#{timeout => 30}, Opts),
-    QS = hackney_url:qs([{atom_to_binary(Key, utf8), integer_to_binary(Val)}
-                         || {Key, Val} <- maps:to_list(Opts1)]),
-    Endpoint = pe4kin:get_env(api_server_endpoint, <<"https://api.telegram.org">>),
-    Url = <<Endpoint/binary, "/bot", Token/binary, "/getUpdates?", QS/binary>>,
+do_start_http_poll(Opts, #state{token=Token, active=false, method_state = #{pid := Pid}} = State) ->
+    Opts1 = maps:merge(#{timeout => 30}, Opts),
+    QS = cow_qs:qs([{atom_to_binary(Key, utf8), integer_to_binary(Val)}
+                    || {Key, Val} <- maps:to_list(Opts1)]),
+    Url = <<"/bot", Token/binary, "/getUpdates?", QS/binary>>,
+    Ref = gun:get(Pid, Url),
     ?log(debug, "Long poll ~s", [Url]),
-    case hackney:request(<<"GET">>, Url, [], <<>>,
-                         [async, {recv_timeout, (Timeout + 5) * 1000}]) of
-        {ok, Ref} ->
-            State#state{%% method = longpoll,
-              active = true,
-              method_state = #{ref => Ref,
-                               state => start,
-                               status => undefined,
-                               headers => undefined,
-                               body => undefined}};
-        {error, Reason} ->
-            ?log(warning, "Long polling HTTP error: ~p", [Reason]),
-            timer:sleep(1000),
-            do_start_http_poll(Opts, State)
-    end.
+    State#state{%% method = longpoll,
+      active = true,
+      method_state = #{pid => Pid,
+                       ref => Ref,
+                       state => start}};
+do_start_http_poll(Opts, #state{active=false, method_state = undefined} = State) ->
+    {ok, Pid} = pe4kin_http:open(),
+    do_start_http_poll(Opts, State#state{method_state = #{pid => Pid}}).
 
 do_stop_http_poll(#state{active=true, method=longpoll,
-                         method_state=#{ref := Ref}} = State) ->
-    {ok, _} = hackney:cancel_request(Ref),
+                         method_state=#{ref := Ref, pid := Pid}} = State) ->
+    ok = gun:cancel(Pid, Ref),
+    ok = gun:close(Pid),
     State#state{active=false, method_state=undefined}.
 
 
-handle_http_poll_msg({status, 200 = Status, _Reason},
-                     #state{method_state = #{state := start,
-                                             status := undefined}=MState} = State) ->
-    {ok, State#state{method_state = MState#{state := status, status := Status}}};
-handle_http_poll_msg({status, Status, _Reason},
-                     #state{method_state = MState, name = Name} = State) ->
+handle_http_poll_msg({200, _Headers, Body},
+                     #state{method_state = #{pid := Pid}} = State) ->
+    push_updates(Body, State#state{method_state=#{pid => Pid}, active=false});
+handle_http_poll_msg({Status, _, _},
+                     #state{method_state = #{pid := Pid} = MState, name = Name} = State) ->
+    gun:close(Pid),
     ?log(warning, "Bot ~p: longpool bad status ~p when state ~p", [Name, Status, MState]),
-    {invariant, State#state{method_state = undefined, active=false}};
-handle_http_poll_msg({headers, Headers},
-                     #state{method_state = #{state := status,
-                                             headers := undefined}=MState} = State) ->
-    {ok, State#state{method_state = MState#{state := headers, headers := Headers}}};
-handle_http_poll_msg(done, #state{method_state = #{state := body,
-                                                   body := Body}} = State) ->
-    State1 = push_updates(Body, State#state{method_state=undefined, active=false}),
-    {invariant, State1};
-handle_http_poll_msg(done, #state{method_state = #{state := _,
-                                                   body := undefined}} = State) ->
-    {invariant, State};
-handle_http_poll_msg({error, Reason}, #state{method_state = MState, name=Name} = State) ->
-    ?log(error, "Bot ~p: hackney longpoll error ~p when state ~p", [Name, Reason, MState]),
-    {invariant, State#state{method_state=undefined, active=false}};
-handle_http_poll_msg(Chunk, #state{method_state = #{state := headers,
-                                                    body := undefined}=MState} = State) ->
-    {ok, State#state{method_state = MState#{state := body, body := Chunk}}};
-handle_http_poll_msg(Chunk, #state{method_state = #{state := body,
-                                                    body := Body}=MState} = State) ->
-    {ok, State#state{method_state = MState#{body := [Body | Chunk]}}}.
+    State#state{method_state = undefined, active=false};
+handle_http_poll_msg({error, Reason}, #state{method_state = #{pid := Pid} = MState, name=Name} = State) ->
+    gun:close(Pid),
+    ?log(error, "Bot ~p: http longpoll error ~p when state ~p", [Name, Reason, MState]),
+    State#state{method_state=undefined, active=false}.
 
 
 push_updates(<<>>, State) -> State;

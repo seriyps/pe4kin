@@ -148,8 +148,8 @@ send_text_by_parts(Bot, Utf8Str, Extra) ->
 %% This API is for testing purposes
 get_updates_sync(Bot, Opts) ->
     Opts1 = Opts#{timeout => 0},
-    QS = hackney_url:qs([{atom_to_binary(Key, utf8), integer_to_binary(Val)}
-                         || {Key, Val} <- maps:to_list(Opts1)]),
+    QS = cow_qs:qs([{atom_to_binary(Key, utf8), integer_to_binary(Val)}
+                    || {Key, Val} <- maps:to_list(Opts1)]),
     api_call(Bot, <<"getUpdates?", QS/binary>>).
 
 %% Generic API methods
@@ -160,8 +160,7 @@ download_file(Bot, #{<<"file_id">> := _,
     Endpoint = get_env(api_server_endpoint, <<"https://api.telegram.org">>),
     Token = get_token(Bot),
     Url = <<Endpoint/binary, "/file/bot", Token/binary, "/", FilePath/binary>>,
-    {ok, 200, Headers, BodyRef} = do_api_call(Url, undefined),
-    {ok, Body} = hackney:body(BodyRef),
+    {ok, 200, Headers, Body} = do_api_call(Url, undefined),
     {ok, Headers, Body}.
 
 
@@ -175,44 +174,41 @@ api_call(Bot, Method, Payload) ->
     Token = get_token(Bot),
     api_call({Endpoint, Token}, Bot, Method, Payload).
 
-api_call({ApiServerEndpoint, Token}, _Bot, Method, Payload) ->
-    Url = <<ApiServerEndpoint/binary, "/bot", Token/binary, "/", Method/binary>>,
+api_call({_ApiServerEndpoint, Token}, _Bot, Method, Payload) ->
+    Url = <<"/bot", Token/binary, "/", Method/binary>>,
     case do_api_call(Url, Payload) of
-        {ok, Code, Hdrs, BodyRef} ->
-            ContentType = hackney_headers:parse(<<"content-type">>, Hdrs),
-            case {hackney:body(BodyRef), ContentType, Code} of
-                {{ok, <<>>}, _, 200} -> ok;
-                {{ok, Body}, {<<"application">>, <<"json">>, _}, _}  ->
+        {ok, Code, Hdrs, Body} ->
+            ContentType = cow_http_hd:parse_content_type(
+                            proplists:get_value(<<"content-type">>, Hdrs)),
+            case {Body, ContentType, Code} of
+                {<<>>, _, 200} -> ok;
+                {Body, {<<"application">>, <<"json">>, _}, _}  ->
                     case jiffy:decode(Body, [return_maps]) of
                         #{<<"ok">> := true, <<"result">> := Result} when Code == 200 ->
                             {ok, Result};
                         #{<<"ok">> := false, <<"description">> := ErrDescription,
                           <<"error_code">> := ErrCode} when Code =/= 200 ->
                             {error, telegram, {ErrCode, Code, ErrDescription}}
-                    end;
-                {{error, ErrBody}, _, _} -> {error, hackney_body, ErrBody}
+                    end
             end;
-        {error, ErrReason} -> {error, hackney, ErrReason}
+        {error, ErrReason} -> {error, http, ErrReason}
     end.
 
 
 do_api_call(Url, undefined) ->
-    hackney:request(<<"GET">>, Url, [], [], [{pool, ?HACKNEY_POOL}]);
-do_api_call(Url, {json, Payload}) ->
-    Json = jiffy:encode(Payload),
-    Headers = [{<<"Content-Type">>, <<"application/json">>},
-               {<<"Accept">>, <<"application/json">>}],
-    hackney:request(<<"POST">>, Url, Headers, Json, [{pool, ?HACKNEY_POOL}]);
+    pe4kin_http:get(Url);
+do_api_call(Url, {json, _} = Json) ->
+    Headers = [{<<"content-type">>, <<"application/json">>},
+               {<<"accept">>, <<"application/json">>}],
+    pe4kin_http:post(Url, Headers, Json);
 do_api_call(Url, {query, Payload}) ->
-    Headers = [{<<"Content-Type">>, <<"application/x-www-form-urlencoded; encoding=utf-8">>},
-               {<<"Accept">>, <<"application/json">>}],
-    hackney:request(<<"POST">>, Url, Headers, {form, maps:to_list(Payload)},
-                    [{pool, ?HACKNEY_POOL}]);
+    Headers = [{<<"content-type">>, <<"application/x-www-form-urlencoded; encoding=utf-8">>},
+               {<<"accept">>, <<"application/json">>}],
+    pe4kin_http:post(Url, Headers, {form, maps:to_list(Payload)});
 do_api_call(Url, {multipart, Payload}) ->
-    Headers = [{<<"Content-Type">>, <<"multipart/form-data">>},
-               {<<"Accept">>, <<"application/json">>}],
-    hackney:request(<<"POST">>, Url, Headers, {multipart, Payload},
-                    [{pool, ?HACKNEY_POOL}]).
+    Headers = [{<<"content-type">>, <<"multipart/form-data">>},
+               {<<"accept">>, <<"application/json">>}],
+    pe4kin_http:post(Url, Headers, {multipart, Payload}).
 
 body_with_file(FileFields, Payload) ->
     body_with_file_(FileFields, json, Payload).
