@@ -6,6 +6,18 @@
 -export([open/0, open/3, get/1, post/3]).
 
 -type response() :: {non_neg_integer(), [{binary(), binary()}], iodata()}.
+-type path() :: iodata().
+-type req_headers() :: [{binary(), iodata()}].
+-type disposition() ::
+        {Disposition :: binary(), Params :: [{binary(), iodata()}]}.
+-type multipart() ::
+        {file, file:name_all(), disposition(), req_headers()} |
+        {Name :: binary(), Payload :: binary(), disposition(), req_headers()} |
+        {Name :: binary(), Payload :: binary()}.
+-type req_body() :: binary() |
+                    {form, #{binary() => binary()}} |
+                    {json, pe4kin:json_value()} |
+                    {multipart, multipart()}.
 
 open() ->
     {ok, Endpoint} = pe4kin:get_env(api_server_endpoint),
@@ -24,6 +36,7 @@ get(Path) ->
               await(C, gun:get(C, Path, [], #{reply_to => self()}))
       end).
 
+-spec post(path(), req_headers(), req_body()) -> response() | {error, any()}.
 post(Path, Headers, Body) when is_binary(Body) ->
     with_conn(
       fun(C) ->

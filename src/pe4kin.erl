@@ -177,7 +177,7 @@ api_call(Bot, Method, Payload) ->
 api_call({_ApiServerEndpoint, Token}, _Bot, Method, Payload) ->
     Url = <<"/bot", Token/binary, "/", Method/binary>>,
     case do_api_call(Url, Payload) of
-        {ok, Code, Hdrs, Body} ->
+        {Code, Hdrs, Body} ->
             ContentType = cow_http_hd:parse_content_type(
                             proplists:get_value(<<"content-type">>, Hdrs)),
             case {Body, ContentType, Code} of
