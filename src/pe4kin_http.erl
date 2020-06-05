@@ -15,6 +15,7 @@
         {Name :: binary(), Payload :: binary(), disposition(), req_headers()} |
         {Name :: binary(), Payload :: binary()}.
 -type req_body() :: binary() |
+                    iodata() |
                     {form, #{binary() => binary()}} |
                     {json, pe4kin:json_value()} |
                     {multipart, multipart()}.
@@ -37,7 +38,8 @@ get(Path) ->
       end).
 
 -spec post(path(), req_headers(), req_body()) -> response() | {error, any()}.
-post(Path, Headers, Body) when is_binary(Body) ->
+post(Path, Headers, Body) when is_binary(Body);
+                               is_list(Body) ->
     with_conn(
       fun(C) ->
               await(C, gun:post(C, Path, Headers, Body, #{reply_to => self()}))
