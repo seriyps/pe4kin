@@ -7,8 +7,7 @@
    [kernel,
     stdlib,
     pooler,
-    gun,
-    cowboy
+    gun
    ]},
   {env,
    [
