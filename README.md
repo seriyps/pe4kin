@@ -66,7 +66,7 @@ Example
 > {ok, #{<<"first_name">> := _, <<"id">> := _, <<"username">> := _}} = pe4kin:get_me(BotName).
 
 % Send reply to previously received `Update` message (note `ChatId`)
-> From = maps:get(<<"first_name">>, maps:get(<<"from">>, Message, #{}), <<"Anonumous">>).
+> From = maps:get(<<"first_name">>, maps:get(<<"from">>, Message, #{}), <<"Anonimous">>).
 > HeartEmoji = pe4kin_emoji:name_to_char('heart').
 > ResponseText = unicode:characters_to_binary([<<"Hello, ">>, From, HeartEmoji]).
 > {ok, _} = pe4kin:send_message(BotName, #{chat_id => ChatId, text => ResponseText}).
