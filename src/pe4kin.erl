@@ -46,8 +46,6 @@
                     | {query, #{json_string() => json_literal()}}
                     | {multipart, #{json_string() => json_literal() | input_file()}}.
 
--define(HACKNEY_POOL, ?MODULE).
-
 get_token(Bot) ->
     {ok, Token} = get_env({Bot, token}),
     Token.
