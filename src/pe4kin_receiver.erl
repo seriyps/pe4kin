@@ -22,7 +22,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--include_lib("hut/include/hut.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -type longpoll_state() :: #{pid => pid(),
                             ref => reference(),
@@ -135,7 +135,9 @@ handle_call({unsubscribe, _, Pid}, _From, #state{subscribers=Subs, monitors = Mo
 handle_call({get_updates, _, Limit}, _From, #state{buffer_edge_size=BESize, subscribers=Subs} = State)
   when map_size(Subs) == 0 ->
     (BESize >= Limit) orelse
-        ?log(warning, "get_updates limit ~p is greater than buffer_edge_size ~p", [Limit, BESize]),
+        ?LOG_WARNING("get_updates limit ~p is greater than buffer_edge_size ~p",
+                     [Limit, BESize],
+                     #{domain => [pe4kin]}),
     {Reply, State1} = pull_updates(Limit, State),
     {reply, Reply, invariant(State1)};
 handle_call(_Request, _From, #state{method=Method, subscribers=Subs, ulen=ULen, active=Active}=State) ->
@@ -144,7 +146,7 @@ handle_call(_Request, _From, #state{method=Method, subscribers=Subs, ulen=ULen, 
                                    ulen => ULen,
                                    active => Active}}, State}.
 handle_cast(Msg, State) ->
-    ?log(warning, "Unexpected cast ~p; state ~p", [Msg, State]),
+    ?LOG_WARNING("Unexpected cast ~p; state ~p", [Msg, State], #{domain => [pe4kin]}),
     {noreply, State}.
 
 handle_info({gun_response, Pid, Ref, IsFin, Status, Headers}, #state{method_state=#{ref := Ref}} = State) ->
@@ -160,8 +162,9 @@ handle_info({gun_response, Pid, Ref, IsFin, Status, Headers}, #state{method_stat
         end,
     State1 = handle_http_poll_msg(WithBody, State),
     {noreply, invariant(State1)};
-handle_info({gun_response, Ref, Msg}, #state{method_state=MState} = State) ->
-    ?log(warning, "Unexpected http msg ~p, ~p; state ~p", [Ref, Msg, MState]),
+handle_info({gun_response, Ref, Msg}, #state{method_state=MState, name = Name} = State) ->
+    ?LOG_WARNING("Unexpected http msg ~p, ~p; state ~p", [Ref, Msg, MState],
+                 #{domain => [pe4kin], bot => Name}),
     {noreply, State};
 handle_info({gun_error, Pid, Ref, Reason}, #state{method_state=#{ref := Ref, pid := Pid}} = State) ->
     State1 = handle_http_poll_msg({error, Reason}, State),
@@ -173,8 +176,10 @@ handle_info({'DOWN', Ref, process, Pid, _Reason}, #state{subscribers=Subs, monit
     {noreply,
      State#state{subscribers = maps:remove(Pid, Subs),
                  monitors = maps:remove(Ref, Mons)}};
-handle_info(Info, State) ->
-    ?log(warning, "Unexpected info msg ~p; state ~p", [Info, State]),
+handle_info(Info, #state{name = Name} = State) ->
+    ?LOG_WARNING("Unexpected info msg ~p; state ~p", [Info, State],
+                 #{domain => [pe4kin],
+                   bot => Name}),
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -208,7 +213,7 @@ do_start_http_poll(Opts, #state{token=Token, active=false, method_state = #{pid 
                     || {Key, Val} <- maps:to_list(Opts1)]),
     Url = <<"/bot", Token/binary, "/getUpdates?", QS/binary>>,
     Ref = gun:get(Pid, Url),
-    ?log(debug, "Long poll ~s", [Url]),
+    ?LOG_DEBUG("Long poll ~s", [Url], #{domain => [pe4kin]}),
     State#state{%% method = longpoll,
       active = true,
       method_state = #{pid => Pid,
@@ -231,11 +236,15 @@ handle_http_poll_msg({200, _Headers, Body},
 handle_http_poll_msg({Status, _, _},
                      #state{method_state = #{pid := Pid} = MState, name = Name} = State) ->
     gun:close(Pid),
-    ?log(warning, "Bot ~p: longpool bad status ~p when state ~p", [Name, Status, MState]),
+    ?LOG_WARNING("Bot ~p: longpool bad status ~p when state ~p", [Name, Status, MState],
+                 #{domain => [pe4kin],
+                   bot => Name}),
     State#state{method_state = undefined, active=false};
 handle_http_poll_msg({error, Reason}, #state{method_state = #{pid := Pid} = MState, name=Name} = State) ->
     gun:close(Pid),
-    ?log(error, "Bot ~p: http longpoll error ~p when state ~p", [Name, Reason, MState]),
+    ?LOG_WARNING("Bot ~p: http longpoll error ~p when state ~p", [Name, Reason, MState],
+                 #{domain => [pe4kin],
+                   bot => Name}),
     State#state{method_state=undefined, active=false}.
 
 
