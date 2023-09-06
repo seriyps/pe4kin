@@ -32,70 +32,74 @@ open(Transport, Host, Port) ->
 
 -spec get(iodata()) -> response() | {error, any()}.
 get(Path) ->
-    with_conn(
-      fun(C) ->
-              await(C, gun:get(C, Path, [], #{reply_to => self()}))
-      end).
+    {Opts, Host} = http_req_opts(),
+    await(gun_pool:get(Path, #{<<"host">> => Host}, Opts)).
 
 -spec post(path(), req_headers(), req_body()) -> response() | {error, any()}.
 post(Path, Headers, Body) when is_binary(Body);
                                is_list(Body) ->
-    with_conn(
-      fun(C) ->
-              await(C, gun:post(C, Path, Headers, Body, #{reply_to => self()}))
-      end);
+    {Opts, Host} = http_req_opts(),
+    await(gun_pool:post(Path, [{<<"host">>, Host} | Headers], Body, Opts));
 post(Path, Headers, {form, KV}) ->
     post(Path, Headers, cow_qs:qs(maps:to_list(KV)));
 post(Path, Headers, {json, Struct}) ->
     post(Path, Headers, jiffy:encode(Struct));
 post(Path, Headers0, {multipart, Multipart}) ->
-    with_conn(
-      fun(C) ->
-              Boundary = cow_multipart:boundary(),
-              {value, {_, <<"multipart/form-data">>}, Headers1} =
-                  lists:keytake(<<"content-type">>, 1, Headers0),
-              Headers = [{<<"content-type">>,
-                          [<<"multipart/form-data;boundary=">>, Boundary]}
-                        | Headers1],
-              Ref = gun:post(C, Path, Headers, <<>>, #{reply_to => self()}),
-              multipart_stream(C, Ref, Boundary, Multipart),
-              await(C, Ref)
-      end).
+    Boundary = cow_multipart:boundary(),
+    {value, {_, <<"multipart/form-data">>}, Headers1} =
+        lists:keytake(<<"content-type">>, 1, Headers0),
+    Headers = [{<<"content-type">>,
+                [<<"multipart/form-data;boundary=">>, Boundary]}
+              | Headers1],
+    {Opts, Host} = http_req_opts(),
+    {async, Ref} = gun_pool:post(Path, [{<<"host">>, Host} | Headers], Opts),
+    multipart_stream(Ref, Boundary, Multipart),
+    await(Ref).
 
+http_req_opts() ->
+    {ok, PoolOpts} = pe4kin:get_env(keepalive_pool),
+    Opts = #{reply_to => self(),
+             scope => ?MODULE,
+             checkout_retry => maps:get(checkout_retry, PoolOpts, [])},
+    {ok, Endpoint} = pe4kin:get_env(api_server_endpoint),
+    {_Transport, Host, _Port} = parse_endpoint(Endpoint),
+    {Opts, Host}.
 
-await(C, Ref) ->
-    case gun:await(C, Ref) of
+await({async, Ref}) ->
+    await(Ref);
+await(Ref) ->
+    case gun_pool:await(Ref, 30_000) of
         {response, fin, Status, Headers} ->
             {Status, Headers, []};
         {response, nofin, Status, Headers} ->
-            {ok, Body} = gun:await_body(C, Ref),
+            {ok, Body} = gun_pool:await_body(Ref),
             {Status, Headers, Body};
         {error, _} = Err ->
             Err
     end.
 
-multipart_stream(C, Ref, Boundary, Multipart) ->
+multipart_stream(Ref, Boundary, Multipart) ->
     ok = lists:foreach(
           fun({file, Path, Disposition, Hdrs0}) ->
                   {ok, Bin} = file:read_file(Path),
                   Hdrs = [{<<"content-disposition">>, encode_disposition(Disposition)}
                          | Hdrs0],
                   Chunk = cow_multipart:part(Boundary, Hdrs),
-                  ok = gun:data(C, Ref, nofin, [Chunk, Bin]);
+                  ok = gun_pool:data(Ref, nofin, [Chunk, Bin]);
              ({_Name, Payload, Disposition, Hdrs0}) ->
                   Hdrs = [{<<"content-disposition">>, encode_disposition(Disposition)}
                          | Hdrs0],
                   Chunk = cow_multipart:part(Boundary, Hdrs),
-                  ok = gun:data(C, Ref, nofin, [Chunk, Payload]);
+                  ok = gun_pool:data(Ref, nofin, [Chunk, Payload]);
              ({Name, Value}) ->
                   Hdrs = [{<<"content-disposition">>,
                            encode_disposition({<<"form-data">>,
                                                [{<<"name">>, Name}]})}],
                   Chunk = cow_multipart:part(Boundary, Hdrs),
-                  ok = gun:data(C, Ref, nofin, [Chunk, Value])
+                  ok = gun_pool:data(Ref, nofin, [Chunk, Value])
           end, Multipart),
     Closing = cow_multipart:close(Boundary),
-    ok = gun:data(C, Ref, fin, Closing).
+    ok = gun_pool:data(Ref, fin, Closing).
 
 encode_disposition({Disposition, Params}) ->
     [Disposition
@@ -105,13 +109,20 @@ encode_disposition({Disposition, Params}) ->
 
 start_pool() ->
     {ok, Opts} = pe4kin:get_env(keepalive_pool),
-    PoolOpts = [{name, ?MODULE},
-                {start_mfa, {?MODULE, open, []}}
-               | Opts],
-    {ok, _Pid} = pooler:new_pool(PoolOpts).
+    {ok, Endpoint} = pe4kin:get_env(api_server_endpoint),
+    {Transport, Host, Port} = parse_endpoint(Endpoint),
+    {ok, ManagerPid} = gun_pool:start_pool(Host, Port, #{
+		conn_opts => #{protocols => [http2],
+                       transport => Transport},
+		scope => ?MODULE,
+        size => maps:get(max_count, Opts, 10)
+	}),
+	gun_pool:await_up(ManagerPid).
 
 stop_pool() ->
-    ok = pooler:rm_pool(?MODULE).
+    {ok, Endpoint} = pe4kin:get_env(api_server_endpoint),
+    {_Transport, Host, Port} = parse_endpoint(Endpoint),
+    ok = gun_pool:stop_pool(Host, Port).
 
 parse_endpoint(Uri) ->
     Parts = case Uri of
@@ -128,17 +139,3 @@ parse_endpoint(Uri) ->
         [Transport, Host, Port] ->
             {Transport, binary_to_list(Host), binary_to_integer(Port)}
     end.
-
-
-with_conn(Fun) ->
-    C = pooler:take_member(?MODULE, {5, sec}),
-    (C =/= error_no_members)
-        orelse error(pool_overflow),
-    Res =
-        try Fun(C)
-        catch Err:Reason:Stack ->
-                pooler:return_member(?MODULE, C, fail),
-                erlang:raise(Err, Reason, Stack)
-        end,
-    pooler:return_member(?MODULE, C, ok),
-    Res.
