@@ -44,7 +44,7 @@ name_to_char(_) -> throw({{pe4kin, invalid_emoji_name}}).
 {char2name};
 char_to_name(_) -> throw({{pe4kin, unknown_emoji}}).
 
--spec names() -> ordssets:ordset(atom()).
+-spec names() -> ordsets:ordset(atom()).
 names() ->
 [{names}].
 

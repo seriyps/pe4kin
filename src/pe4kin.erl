@@ -167,7 +167,7 @@ download_file(Bot, #{<<"file_id">> := _,
 api_call(Bot, Method) ->
     api_call(Bot, Method, undefined).
 
--spec api_call(bot_name(), binary(), pe4kin_http:request_body() | undefined) ->
+-spec api_call(bot_name(), binary(), pe4kin_http:req_body() | undefined) ->
           {ok, json_value()} | {error, Type :: atom(), term()}.
 api_call(Bot, Method, Payload) ->
     Endpoint = get_env(api_server_endpoint, <<"https://api.telegram.org">>),
@@ -183,7 +183,7 @@ api_call({_ApiServerEndpoint, Token}, _Bot, Method, Payload) ->
             case {Body, ContentType, Code} of
                 {<<>>, _, 200} -> ok;
                 {Body, {<<"application">>, <<"json">>, _}, _}  ->
-                    case jiffy:decode(Body, [return_maps]) of
+                    case pe4kin_http:json_decode(Body) of
                         #{<<"ok">> := true, <<"result">> := Result} when Code == 200 ->
                             {ok, Result};
                         #{<<"ok">> := false, <<"description">> := ErrDescription,

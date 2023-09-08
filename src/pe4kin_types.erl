@@ -65,7 +65,7 @@ user(Type, Update) ->
 
 
 %% @doc Returns only 1st command
--spec message_command(perkin:bot_name(), pe4kin:json_object()) ->
+-spec message_command(pe4kin:bot_name(), pe4kin:json_object()) ->
                              {Cmd :: binary(),
                               BotName :: binary(),
                               SentToMe :: boolean(),

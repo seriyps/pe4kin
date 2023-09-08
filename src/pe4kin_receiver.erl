@@ -250,7 +250,7 @@ handle_http_poll_msg({error, Reason}, #state{method_state = #{pid := Pid} = MSta
 
 push_updates(<<>>, State) -> State;
 push_updates(UpdatesBin, #state{last_update_id = LastID, updates = UpdatesQ, ulen = ULen} = State) ->
-    case jiffy:decode(UpdatesBin, [return_maps]) of
+    case pe4kin_http:json_decode(UpdatesBin) of
         [] -> State;
         #{<<"ok">> := true, <<"result">> := []} -> State;
         #{<<"ok">> := true, <<"result">> := NewUpdates} ->

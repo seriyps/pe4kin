@@ -4,6 +4,7 @@
 
 -export([start_pool/0, stop_pool/0]).
 -export([open/0, open/3, get/1, post/3]).
+-export([json_encode/1, json_decode/1]).
 
 -export_type([req_body/0]).
 
@@ -45,7 +46,7 @@ post(Path, Headers, Body) when is_binary(Body);
 post(Path, Headers, {form, KV}) ->
     post(Path, Headers, cow_qs:qs(maps:to_list(KV)));
 post(Path, Headers, {json, Struct}) ->
-    post(Path, Headers, jiffy:encode(Struct));
+    post(Path, Headers, json_encode(Struct));
 post(Path, Headers0, {multipart, Multipart}) ->
     Boundary = cow_multipart:boundary(),
     {value, {_, <<"multipart/form-data">>}, Headers1} =
@@ -154,3 +155,13 @@ parse_endpoint(Uri) ->
         [Transport, Host, Port] ->
             {Transport, binary_to_list(Host), binary_to_integer(Port)}
     end.
+
+-dialyzer({nowarn_function, json_decode/1}).
+-spec json_decode(binary()) -> pe4kin:json_value().
+json_decode(Body) ->
+    jiffy:decode(Body, [return_maps]).
+
+-dialyzer({nowarn_function, json_encode/1}).
+-spec json_encode(pe4kin:json_value()) -> binary().
+json_encode(Struct) ->
+    jiffy:encode(Struct).

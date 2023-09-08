@@ -1681,7 +1681,7 @@ char_to_name(16#1f6c4) -> 'baggage_claim';
 char_to_name(16#1f6c5) -> 'left_luggage';
 char_to_name(_) -> throw({pe4kin, unknown_emoji}).
 
--spec names() -> ordssets:ordset(atom()).
+-spec names() -> ordsets:ordset(atom()).
 names() ->
 ['+1',
 '-1',
