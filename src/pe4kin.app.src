@@ -6,17 +6,14 @@
   {applications,
    [kernel,
     stdlib,
-    pooler,
     gun
    ]},
   {env,
    [
     {api_server_endpoint, <<"https://api.telegram.org">>},
     {keepalive_pool,
-     [{init_count, 1},
-      {max_count, 10},
-      {cull_interval, {1, min}},
-      {max_age, {2, min}}]}
+     #{max_count => 10,
+       checkout_retry => [500, 1000, 1500]}}
    ]},
   {modules, []},
 
