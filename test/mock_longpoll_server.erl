@@ -112,13 +112,13 @@ init(Req0, #{token := Token} = Opts) ->
 reply(Code, Response, Req) when Code < 300, Code >= 200 ->
     Body = jiffy:encode(#{ok => true,
                           result => Response}),
-    Req1 = cowboy_req:reply(Code, #{}, Body, Req),
+    Req1 = cowboy_req:reply(Code, #{<<"content-type">> => <<"application/json">>}, Body, Req),
     {ok, Req1, []};
 reply(Code, Response, Req) ->
     Body = jiffy:encode(#{ok => false,
                           error_code => Code,
                           description => Response}),
-    Req1 = cowboy_req:reply(Code, #{}, Body, Req),
+    Req1 = cowboy_req:reply(Code, #{<<"content-type">> => <<"application/json">>}, Body, Req),
     {ok, Req1, []}.
 
 handle_api_call(<<"getUpdates">>, QS, <<>>, #{state_pid := Pid}) ->

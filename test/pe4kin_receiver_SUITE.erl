@@ -11,7 +11,8 @@
 
 -export([basic_update_case/1,
          basic_2_updates_case/1,
-         basic_3_separate_updates_case/1
+         basic_3_separate_updates_case/1,
+         make_api_call_case/1
         ]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -36,35 +37,37 @@ groups() ->
 
 
 init_per_suite(Cfg) ->
-    {ok, _} = application:ensure_all_started(pe4kin),
+    application:load(pe4kin),
     Cfg.
 
 end_per_suite(Cfg) ->
-    ok = application:stop(pe4kin),
     Cfg.
 
 
 init_per_testcase(Name, Cfg) ->
-    Env = application:get_all_env(pe4kin),
+    BotName = <<"my-bot">>,
     Tok = <<"my-token">>,
     Srv = mock_longpoll_server:start(#{token => Tok}),
-    [{pre_env, Env} | ?MODULE:Name({pre, [{server, Srv}, {token, Tok} | Cfg]})].
+    Env = application:get_all_env(pe4kin),
+    application:set_env(pe4kin, tokens, #{BotName => Tok}),
+    {ok, _} = application:ensure_all_started(pe4kin),
+    [{pre_env, Env} | ?MODULE:Name({pre, [{server, Srv}, {name, BotName}, {token, Tok} | Cfg]})].
 
 end_per_testcase(Name, Cfg) ->
-    Env = ?config(pre_env, Cfg),
+    %% Env = ?config(pre_env, Cfg),
     Srv = ?config(server, Cfg),
     ?MODULE:Name({post, Cfg}),
     ok = mock_longpoll_server:stop(Srv),
-    ok = application:set_env([{pe4kin, Env}]),
+    ok = application:stop(pe4kin),
     Cfg.
 
 
 %% @doc Test single update
 basic_update_case({pre, Cfg}) ->
-    Name = <<"my-bot">>,
+    Name = ?config(name, Cfg),
     Tok = ?config(token, Cfg),
     {ok, Pid} = pe4kin_receiver:start_link(Name, Tok, #{}),
-    [{name, Name}, {recv_pid, Pid} | Cfg];
+    [{recv_pid, Pid} | Cfg];
 basic_update_case({post, Cfg}) ->
     RecvPid = ?config(recv_pid, Cfg),
     unlink(RecvPid),
@@ -82,10 +85,10 @@ basic_update_case(Cfg) when is_list(Cfg) ->
 
 %% @doc Test 2 updates at once
 basic_2_updates_case({pre, Cfg}) ->
-    Name = <<"my-bot">>,
+    Name = ?config(name, Cfg),
     Tok = ?config(token, Cfg),
     {ok, Pid} = pe4kin_receiver:start_link(Name, Tok, #{}),
-    [{name, Name}, {recv_pid, Pid} | Cfg];
+    [{recv_pid, Pid} | Cfg];
 basic_2_updates_case({post, Cfg}) ->
     RecvPid = ?config(recv_pid, Cfg),
     unlink(RecvPid),
@@ -107,10 +110,10 @@ basic_2_updates_case(Cfg) when is_list(Cfg) ->
 
 %% @doc Test 3 updates at once
 basic_3_separate_updates_case({pre, Cfg}) ->
-    Name = <<"my-bot">>,
+    Name = ?config(name, Cfg),
     Tok = ?config(token, Cfg),
     {ok, Pid} = pe4kin_receiver:start_link(Name, Tok, #{}),
-    [{name, Name}, {recv_pid, Pid} | Cfg];
+    [{recv_pid, Pid} | Cfg];
 basic_3_separate_updates_case({post, Cfg}) ->
     RecvPid = ?config(recv_pid, Cfg),
     unlink(RecvPid),
@@ -130,6 +133,34 @@ basic_3_separate_updates_case(Cfg) when is_list(Cfg) ->
                               <<"update_id">> => I}], recv(Name, 1)),
               ?assertEqual([], flush(Name))
       end, lists:seq(0, 2)).
+
+make_api_call_case({pre, Cfg}) ->
+    Cfg;
+make_api_call_case({post, Cfg}) ->
+    Cfg;
+make_api_call_case(Cfg) when is_list(Cfg) ->
+    Name = ?config(name, Cfg),
+    {ok, MeRes} = pe4kin:get_me(Name),
+    ?assertEqual(#{<<"body">> => <<>>,
+                   <<"method">> => <<"getMe">>,
+                   <<"query">> => #{}}, MeRes),
+    {ok, MsgRes} = pe4kin:send_message(Name, #{chat_id => 1, text => <<"text">>}),
+    ?assertMatch(#{<<"body">> := _,
+                   <<"method">> := <<"sendMessage">>,
+                   <<"query">> := #{}},
+                 MsgRes),
+    ?assertEqual(#{<<"text">> => <<"text">>,
+                   <<"chat_id">> => 1},
+                 pe4kin_http:json_decode(maps:get(<<"body">>, MsgRes))),
+    File = {file, <<"test.txt">>, <<"text/plain">>, <<"test">>},
+    {ok, DocRes} = pe4kin:send_document(Name, #{chat_id => 1, document => File}),
+    ?assertMatch(#{<<"body">> := <<"\r\n--", _/binary>>,
+                   <<"method">> := <<"sendDocument">>,
+                   <<"query">> := #{}}, DocRes),
+    MPBody = maps:get(<<"body">>, DocRes),
+    ?assertMatch({_, _}, binary:match(MPBody, <<"filename=\"test.txt\"">>)),
+    ?assertMatch({_, _}, binary:match(MPBody, <<"Content-Type: text/plain">>)),
+    ?assertMatch({_, _}, binary:match(MPBody, <<"\r\n\r\ntest\r\n">>)).
 
 flush(Bot) ->
     recv(Bot, 5, 0).

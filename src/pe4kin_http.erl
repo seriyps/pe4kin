@@ -65,8 +65,8 @@ http_req_opts() ->
              scope => ?MODULE,
              checkout_retry => maps:get(checkout_retry, PoolOpts, [])},
     {ok, Endpoint} = pe4kin:get_env(api_server_endpoint),
-    {_Transport, Host, _Port} = parse_endpoint(Endpoint),
-    {Opts, Host}.
+    {Transport, Host, Port} = parse_endpoint(Endpoint),
+    {Opts, gun_http:host_header(Transport, Host, Port)}.
 
 await({async, Ref}) ->
     await(Ref);
