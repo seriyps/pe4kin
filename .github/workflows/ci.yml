@@ -34,11 +34,11 @@ jobs:
       - name: Eunit test
         run: rebar3 eunit
 
-      - name: Eunit test
+      - name: Common test
         run: rebar3 ct
 
       - name: Generate docs
         run: rebar3 edoc
 
-      # - name: Dialyze
-      #   run: rebar3 dialyzer
+      - name: Dialyze
+        run: rebar3 dialyzer

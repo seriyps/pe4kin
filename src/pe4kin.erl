@@ -42,16 +42,17 @@
 -type json_object() :: #{json_string() => json_value()}.
 
 -type api_body() :: undefined
-                    | {json, json_object()}
-                    | {query, #{json_string() => json_literal()}}
-                    | {multipart, #{json_string() => json_literal() | input_file()}}.
+                  | #{json_string() => json_literal() | input_file()}
+                  | [{json_string(), json_literal() | input_file()}].
 
+-spec get_token(bot_name()) -> binary().
 get_token(Bot) ->
-    {ok, Token} = get_env({Bot, token}),
-    Token.
+    Tokens = get_env(tokens, #{}),
+    maps:get(Bot, Tokens).
 
 launch_bot(Bot, Token, Opts) ->
-    set_env({Bot, token}, Token),
+    Tokens = get_env(tokens, #{}),
+    set_env(tokens, Tokens#{Bot => Token}),
     case Opts of
         #{receiver := true} ->
             %% pe4kin_receiver_sup:start_receiver(
@@ -158,7 +159,7 @@ download_file(Bot, #{<<"file_id">> := _,
     Endpoint = get_env(api_server_endpoint, <<"https://api.telegram.org">>),
     Token = get_token(Bot),
     Url = <<Endpoint/binary, "/file/bot", Token/binary, "/", FilePath/binary>>,
-    {ok, 200, Headers, Body} = do_api_call(Url, undefined),
+    {200, Headers, Body} = do_api_call(Url, undefined),
     {ok, Headers, Body}.
 
 
@@ -166,7 +167,8 @@ download_file(Bot, #{<<"file_id">> := _,
 api_call(Bot, Method) ->
     api_call(Bot, Method, undefined).
 
--spec api_call(bot_name(), binary(), api_body()) -> {ok, json_value()} | {error, Type :: atom(), term()}.
+-spec api_call(bot_name(), binary(), pe4kin_http:request_body() | undefined) ->
+          {ok, json_value()} | {error, Type :: atom(), term()}.
 api_call(Bot, Method, Payload) ->
     Endpoint = get_env(api_server_endpoint, <<"https://api.telegram.org">>),
     Token = get_token(Bot),
@@ -199,10 +201,10 @@ do_api_call(Url, {json, _} = Json) ->
     Headers = [{<<"content-type">>, <<"application/json">>},
                {<<"accept">>, <<"application/json">>}],
     pe4kin_http:post(Url, Headers, Json);
-do_api_call(Url, {query, Payload}) ->
+do_api_call(Url, {form, Payload}) when is_map(Payload) ->
     Headers = [{<<"content-type">>, <<"application/x-www-form-urlencoded; encoding=utf-8">>},
                {<<"accept">>, <<"application/json">>}],
-    pe4kin_http:post(Url, Headers, {form, maps:to_list(Payload)});
+    pe4kin_http:post(Url, Headers, {form, Payload});
 do_api_call(Url, {multipart, Payload}) ->
     Headers = [{<<"content-type">>, <<"multipart/form-data">>},
                {<<"accept">>, <<"application/json">>}],
@@ -211,6 +213,7 @@ do_api_call(Url, {multipart, Payload}) ->
 body_with_file(FileFields, Payload) ->
     body_with_file_(FileFields, json, Payload).
 
+-spec body_with_file_([atom()], json | multipart | form, api_body()) -> pe4kin_http:req_body().
 body_with_file_([Key | Keys] = AllKeys, json, Map) ->
     case maps:get(Key, Map) of
         Bin when is_binary(Bin) -> body_with_file_(Keys, json, Map);
@@ -236,8 +239,8 @@ body_with_file_([], multipart, Load) ->
                            (File) -> File
                         end, Load),
     {multipart, BinLoad};
-body_with_file_([], Enctype, Load) ->
-    %% json
+body_with_file_([], Enctype, Load) when Enctype =:= json;
+                                        Enctype =:= form ->
     {Enctype, Load}.
 
 file2multipart(Key, {file, FileName, ContentType, Payload}) ->
@@ -253,17 +256,14 @@ file2multipart(Key, {file_path, Path}) ->
                         {<<"filename">>, filename:basename(Path)}]},
       []}.
 
--dialyzer({nowarn_function, get_env/2}).
 -spec get_env(any(), any()) -> any().
 get_env(Key, Default) ->
     application:get_env(?MODULE, Key, Default).
 
--dialyzer({nowarn_function, get_env/1}).
 -spec get_env(any()) -> {ok, any()}.
 get_env(Key) ->
     application:get_env(?MODULE, Key).
 
--dialyzer({nowarn_function, set_env/2}).
 -spec set_env(any(), any()) -> ok.
 set_env(Key, Value) ->
     application:set_env(?MODULE, Key, Value).

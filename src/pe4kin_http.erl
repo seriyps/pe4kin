@@ -5,15 +5,17 @@
 -export([start_pool/0, stop_pool/0]).
 -export([open/0, open/3, get/1, post/3]).
 
+-export_type([req_body/0]).
+
 -type response() :: {non_neg_integer(), [{binary(), binary()}], iodata()}.
 -type path() :: iodata().
 -type req_headers() :: [{binary(), iodata()}].
 -type disposition() ::
         {Disposition :: binary(), Params :: [{binary(), iodata()}]}.
 -type multipart() ::
-        {file, file:name_all(), disposition(), req_headers()} |
-        {Name :: binary(), Payload :: binary(), disposition(), req_headers()} |
-        {Name :: binary(), Payload :: binary()}.
+        [{file, file:name_all(), disposition(), req_headers()} |
+         {Name :: binary(), Payload :: binary(), disposition(), req_headers()} |
+         {Name :: binary(), Payload :: binary()}].
 -type req_body() :: binary() |
                     iodata() |
                     {form, #{binary() => binary()}} |
