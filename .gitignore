@@ -9,6 +9,7 @@ _*
 .erlang.cookie
 ebin
 log
+doc/
 erl_crash.dump
 .rebar
 logs

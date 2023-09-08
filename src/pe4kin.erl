@@ -19,7 +19,7 @@
 -export_type([json_object/0, json_value/0]).
 
 -type bot_name() :: binary().                   % bot name without leading "@"
--type chat_id() :: integer().                   % =< 52 bit
+-type chat_id() :: integer().                   % =&lt; 52 bit
 -type update() :: json_object().
 -type input_file() :: {file, Name :: binary(), ContentType :: binary(), Payload :: iodata()}
                     | {file_path, file:name()}
