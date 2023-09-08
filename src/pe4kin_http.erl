@@ -113,18 +113,31 @@ start_pool() ->
     {ok, Opts} = pe4kin:get_env(keepalive_pool),
     {ok, Endpoint} = pe4kin:get_env(api_server_endpoint),
     {Transport, Host, Port} = parse_endpoint(Endpoint),
+    ConnOpts0 = case Transport of
+                    tls ->
+                        case pe4kin:get_env(http_tls_opts, []) of
+                            [] -> #{};
+                            TlsOpts -> #{tls_opts => TlsOpts}
+                        end;
+                    tcp ->
+                        case pe4kin:get_env(http_tcp_opts, []) of
+                            [] -> #{};
+                            TcpOpts -> #{tcp_opts => TcpOpts}
+                        end
+                end,
     {ok, ManagerPid} = gun_pool:start_pool(Host, Port, #{
-		conn_opts => #{protocols => [http2],
-                       transport => Transport},
-		scope => ?MODULE,
+        conn_opts => ConnOpts0#{protocols => [http2],
+                                transport => Transport},
+        scope => ?MODULE,
         size => maps:get(max_count, Opts, 10)
 	}),
 	gun_pool:await_up(ManagerPid).
 
 stop_pool() ->
     {ok, Endpoint} = pe4kin:get_env(api_server_endpoint),
-    {_Transport, Host, Port} = parse_endpoint(Endpoint),
-    ok = gun_pool:stop_pool(Host, Port).
+    {Transport, Host, Port} = parse_endpoint(Endpoint),
+    ok = gun_pool:stop_pool(Host, Port, #{transport => Transport,
+                                          scope => ?MODULE}).
 
 parse_endpoint(Uri) ->
     Parts = case Uri of

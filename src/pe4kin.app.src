@@ -11,6 +11,8 @@
   {env,
    [
     {api_server_endpoint, <<"https://api.telegram.org">>},
+    {http_tcp_opts, []},
+    {http_tls_opts, [{verify, verify_none}]},
     {keepalive_pool,
      #{max_count => 10,
        checkout_retry => [500, 1000, 1500]}},
