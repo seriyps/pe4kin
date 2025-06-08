@@ -110,12 +110,12 @@ init(Req0, #{token := Token} = Opts) ->
     end.
 
 reply(Code, Response, Req) when Code < 300, Code >= 200 ->
-    Body = jiffy:encode(#{ok => true,
+    Body = pe4kin_http:json_encode(#{ok => true,
                           result => Response}),
     Req1 = cowboy_req:reply(Code, #{<<"content-type">> => <<"application/json">>}, Body, Req),
     {ok, Req1, []};
 reply(Code, Response, Req) ->
-    Body = jiffy:encode(#{ok => false,
+    Body = pe4kin_http:json_encode(#{ok => false,
                           error_code => Code,
                           description => Response}),
     Req1 = cowboy_req:reply(Code, #{<<"content-type">> => <<"application/json">>}, Body, Req),

@@ -159,9 +159,9 @@ parse_endpoint(Uri) ->
 -dialyzer({nowarn_function, json_decode/1}).
 -spec json_decode(binary()) -> pe4kin:json_value().
 json_decode(Body) ->
-    jiffy:decode(Body, [return_maps]).
+    jsx:decode(Body, [return_maps]).
 
 -dialyzer({nowarn_function, json_encode/1}).
 -spec json_encode(pe4kin:json_value()) -> binary().
 json_encode(Struct) ->
-    jiffy:encode(Struct).
+    jsx:encode(Struct).
