@@ -16,11 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        otp: ["26.0", "25.3", "24.3"]
+        otp: ["28.0", "27.3", "26.2", "25.3"]
         os: ["ubuntu-22.04"]
-        include:
-          - otp: "23.3"
-            os: "ubuntu-20.04"
 
     steps:
       - uses: actions/checkout@v3
